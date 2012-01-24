@@ -126,7 +126,6 @@ SRCS_3 = std\variant.d \
 	std\stream.d std\socket.d std\socketstream.d \
 	std\perf.d std\container.d std\conv.d \
 	std\zip.d std\cstream.d std\loader.d \
-	std\__fileinit.d \
 	std\datebase.d \
 	std\regex.d \
 	std\stdarg.d \
@@ -279,7 +278,7 @@ SRC_STD= std\zlib.d std\zip.d std\stdint.d std\container.d std\conv.d std\utf.d 
 	std\json.d std\xml.d std\encoding.d std\bigint.d std\concurrency.d \
 	std\range.d std\stdiobase.d std\parallelism.d \
 	std\regex.d std\datebase.d \
-	std\__fileinit.d std\gregorian.d std\exception.d std\ascii.d
+	std\gregorian.d std\exception.d std\ascii.d
 
 SRC_STD_NET= std\net\isemail.d
 
@@ -450,9 +449,6 @@ exception.obj : std\exception.d
 
 file.obj : std\file.d
 	$(DMD) -c $(DFLAGS) std\file.d
-
-__fileinit.obj : std\__fileinit.d
-	$(DMD) -c $(DFLAGS) std\__fileinit.d
 
 format.obj : std\format.d
 	$(DMD) -c $(DFLAGS) std\format.d
