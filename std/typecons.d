@@ -3087,9 +3087,29 @@ unittest
     return result;
 }
 
+private template maxAlignmentType(U...) if(isTypeTuple!U)
+{
+    static if(U.length == 1)
+        alias U[0] maxAlignmentType;
+    else
+    {
+        alias .maxAlignmentType!(U[1 .. $]) other;
+        alias Select!(other.alignof > U[0].alignof ||
+            // It's better to have non-struct alignment type
+            // because of [possible] compiler bugs.
+            other.alignof == U[0].alignof && !is(other == struct),
+            other, U[0]) maxAlignmentType;
+    }
+};
+
 private struct Scoped(T)
 {
-    private byte[__traits(classInstanceSize, T)] Scoped_store = void;
+    // _d_newclass now use default GC alignment (looks like (void*).sizeof * 2 for
+    // small objects). We will just use the maximum of filed alignments.
+    alias maxAlignmentType!(void*, typeof(T.tupleof)) A;
+    private enum badEnd = A.alignof - 1; // 0b11, 0b111, ...
+    private A[0] forAlignmentOnly; // With hope a compiler will align this struct using it
+    private byte[(__traits(classInstanceSize, T) + badEnd) & ~badEnd] Scoped_store = void;
     @property inout(T) Scoped_payload() inout
     {
         return cast(inout(T))(Scoped_store.ptr);
@@ -3130,6 +3150,43 @@ private void destroy(T)(T obj) if (is(T == class))
         Base[0] b = obj;
         destroy(b);
     }
+}
+
+unittest // Issue 6580 testcase
+{
+    enum alignment = (void*).alignof;
+
+    static class C0 { }
+    static class C1 { byte b; }
+    static class C2 { byte[2] b; }
+    static class C3 { byte[3] b; }
+    static class C7 { byte[7] b; }
+    static assert(Scoped!C0.sizeof % alignment == 0);
+    static assert(Scoped!C1.sizeof % alignment == 0);
+    static assert(Scoped!C2.sizeof % alignment == 0);
+    static assert(Scoped!C3.sizeof % alignment == 0);
+    static assert(Scoped!C7.sizeof % alignment == 0);
+
+    enum longAlignment = long.alignof;
+    static class C1long { long l; byte b; }
+    static class C2long { byte[2] b; long l; }
+    static assert(Scoped!C1long .sizeof % longAlignment == 0);
+    static assert(Scoped!C2long .sizeof % longAlignment == 0);
+
+    // Enshure `forAlignmentOnly` field really helps
+    auto c1long = scoped!C1long();
+    auto c2long = scoped!C2long();
+    assert(cast(size_t)&c1long.l % longAlignment == 0);
+    assert(cast(size_t)&c2long.l % longAlignment == 0);
+}
+
+unittest // Original Issue 6580 testcase
+{
+    class C { int i; byte b; }
+
+    auto sa = [scoped!C(), scoped!C()];
+    assert(cast(size_t)&sa[0].i % int.alignof == 0);
+    assert(cast(size_t)&sa[1].i % int.alignof == 0); // fails
 }
 
 unittest
