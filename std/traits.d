@@ -1365,6 +1365,70 @@ unittest
 // Aggregate Types
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::://
 
+/**
+Determines whether $(D T) has its own context pointer.
+$(D T) must be either $(D struct) or $(D union).
+*/
+template hasOwnContextPointer(T)
+    if(is(T == struct) || is(T == union))
+{
+    static if(T.tupleof.length)
+        enum hasOwnContextPointer = T.tupleof[$-1].stringof.endsWith(".this");
+    else
+        enum hasOwnContextPointer = false;
+}
+
+/**
+Determines whether $(D T) or any of its representation types
+have a context pointer.
+*/
+template containsContextPointer(T)
+{
+    static if(is(MultidimensionalStaticArrayElementType!T E) &&
+              multidimensionalStaticArrayElementsCount!T &&
+              (is(E == struct) || is(E == union)))
+        enum containsContextPointer = hasOwnContextPointer!E ||
+            anySatisfy!(.containsContextPointer, FieldTypeTuple!E);
+    else
+        enum containsContextPointer = false;
+}
+
+unittest
+{
+    static assert(!__traits(compiles, hasOwnContextPointer!int));
+    static assert(!containsContextPointer!int);
+
+    static struct StaticS { }
+    static assert(!hasOwnContextPointer!StaticS);
+    static assert(!containsContextPointer!StaticS);
+
+    int i;
+    struct ContextS { void f() { ++i; } }
+    static assert( hasOwnContextPointer!ContextS);
+    static assert( containsContextPointer!ContextS);
+
+    static assert(!__traits(compiles, hasOwnContextPointer!(ContextS[1])));
+    static assert( containsContextPointer!(ContextS[1]));
+    static assert(!containsContextPointer!(ContextS[0]));
+
+    struct S1 { ContextS contextS; }
+    static assert(!hasOwnContextPointer!S1);
+    static assert( containsContextPointer!S1);
+
+    static struct S2 { ContextS contextS; }
+    static assert(!hasOwnContextPointer!S2);
+    static assert( containsContextPointer!S2);
+
+    static struct S3 { ContextS[0] contextS; }
+    static assert(!hasOwnContextPointer!S3);
+    static assert(!containsContextPointer!S3);
+
+    static union U { ContextS contextS; }
+    static assert(!hasOwnContextPointer!U);
+    static assert( containsContextPointer!U);
+}
+
+
 /***
  * Get the types of the fields of a struct or class.
  * This consists of the fields that take up memory space,
