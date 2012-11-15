@@ -2478,7 +2478,7 @@ if (!is(T == class))
 
         private Impl* _store;
 
-        private void initialize(A...)(A args)
+        private void initialize(A...)(auto ref A args)
         {
             _store = cast(Impl*) enforce(malloc(Impl.sizeof));
             static if (hasIndirections!T)
@@ -2531,7 +2531,7 @@ Constructor that initializes the payload.
 
 Postcondition: $(D refCountedIsInitialized)
  */
-    this(A...)(A args) if (A.length > 0)
+    this(A...)(auto ref A args) if (A.length > 0)
     {
         _refCounted.initialize(args);
     }
@@ -2700,6 +2700,16 @@ unittest
     }
 
     alias RefCounted!S SRC;
+}
+
+// 6436
+unittest
+{
+    struct S { this(ref int val) { assert(val == 3); ++val; } }
+
+    int val = 3;
+    auto s = RefCounted!S(val);
+    assert(val == 4);
 }
 
 unittest
@@ -3059,24 +3069,17 @@ unittest
 }
 ----
  */
-@system auto scoped(T, Args...)(Args args) if (is(T == class))
+@system auto scoped(T, Args...)(auto ref Args args) if (is(T == class))
 {
+    // _d_newclass now use default GC alignment (looks like (void*).sizeof * 2 for
+    // small objects). We will just use the maximum of filed alignments.
+    alias classInstanceAlignment!T alignment;
+    alias _aligned!alignment aligned;
+
     static struct Scoped(T)
     {
-        private
-        {
-            // _d_newclass now use default GC alignment (looks like (void*).sizeof * 2 for
-            // small objects). We will just use the maximum of filed alignments.
-            alias maxAlignment!(void*, typeof(T.tupleof)) alignment;
+        private void[aligned(__traits(classInstanceSize, T)) + alignment] Scoped_store = void;
 
-            static size_t aligned(size_t n)
-            {
-                enum badEnd = alignment - 1; // 0b11, 0b111, ...
-                return (n + badEnd) & ~badEnd;
-            }
-
-            void[aligned(__traits(classInstanceSize, T)) + alignment] Scoped_store = void;
-        }
         @property inout(T) Scoped_payload() inout
         {
             return cast(inout(T)) cast(void*) aligned(cast(size_t) Scoped_store.ptr);
@@ -3097,16 +3100,15 @@ unittest
     }
 
     Scoped!T result;
-    emplace!(Unqual!T)(cast(void[])result.Scoped_store, args);
+    immutable size_t d = cast(void*) result.Scoped_payload - result.Scoped_store.ptr;
+    emplace!(Unqual!T)(result.Scoped_store[d .. $], args);
     return result;
 }
 
-private template maxAlignment(U...) if(isTypeTuple!U)
+private size_t _aligned(size_t alignment)(size_t n)
 {
-    static if(U.length == 1)
-        enum maxAlignment = U[0].alignof;
-    else
-        enum maxAlignment = max(U[0].alignof, .maxAlignment!(U[1 .. $]));
+    enum badEnd = alignment - 1; // 0b11, 0b111, ...
+    return (n + badEnd) & ~badEnd;
 }
 
 unittest // Issue 6580 testcase
@@ -3125,18 +3127,26 @@ unittest // Issue 6580 testcase
     static assert(scoped!C7().sizeof % alignment == 0);
 
     enum longAlignment = long.alignof;
-    static class C1long { long l; byte b; }
-    static class C2long { byte[2] b; long l; }
+    static class C1long
+    {
+        long l; byte b = 4;
+        this() { }
+        this(long _l, ref int i) { l = _l; ++i; }
+    }
+    static class C2long { byte[2] b = [5, 6]; long l = 7; }
     static assert(scoped!C1long().sizeof % longAlignment == 0);
     static assert(scoped!C2long().sizeof % longAlignment == 0);
 
     void alignmentTest()
     {
-        // Enshure `forAlignmentOnly` field really helps
-        auto c1long = scoped!C1long();
+        int var = 5;
+        auto c1long = scoped!C1long(3, var);
+        assert(var == 6);
         auto c2long = scoped!C2long();
         assert(cast(size_t)&c1long.l % longAlignment == 0);
         assert(cast(size_t)&c2long.l % longAlignment == 0);
+        assert(c1long.l == 3 && c1long.b == 4);
+        assert(c2long.b == [5, 6] && c2long.l == 7);
     }
 
     alignmentTest();
@@ -3317,6 +3327,15 @@ unittest
     const c3 = scoped!(immutable(A))();
     assert(c3.foo == 1);
     static assert(is(typeof(c3.foo) == immutable(int)));
+}
+
+unittest
+{
+    class C { this(ref int val) { assert(val == 3); ++val; } }
+
+    int val = 3;
+    auto s = scoped!C(val);
+    assert(val == 4);
 }
 
 /**
