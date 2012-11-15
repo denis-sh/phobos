@@ -3643,6 +3643,22 @@ unittest
 }
 
 
+/** Destructs a given object $(D t).
+
+It puts destructed object in its $(D init) state if $(D resetInitialState)
+is $(D true), otherwise object state will be undefined (i.e. possibly invalid).
+
+Note, that it destructs a given object, but not something it references.
+So to destruct a class instance, use $(D object.finalizeClassInstance).
+*/
+void destruct(T)(ref T t, bool resetInitialState = true)
+{
+    callDestructors(t);
+    if(resetInitialState)
+        setInitialState(t);
+}
+
+
 /** Templated setter to object's `init` state.
 
 Use this function instead of dealing with tricky $(D typeid(T).init()).
