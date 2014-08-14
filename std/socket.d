@@ -1123,7 +1123,7 @@ private ushort serviceToPort(in char[] service)
  *     writefln("  Lookup failed: %s", e.msg);
  * ---
  */
-Address[] getAddress(in char[] hostname, in char[] service = null) @trusted
+Address[] getAddress(in char[] hostname, in char[] service = null) @safe
 {
     if (getaddrinfoPointer && freeaddrinfoPointer)
     {
@@ -1140,7 +1140,7 @@ Address[] getAddress(in char[] hostname, in char[] service = null) @trusted
 }
 
 /// ditto
-Address[] getAddress(in char[] hostname, ushort port) @trusted
+Address[] getAddress(in char[] hostname, ushort port) @safe
 {
     if (getaddrinfoPointer && freeaddrinfoPointer)
         return getAddress(hostname, to!string(port));
@@ -1217,7 +1217,7 @@ unittest
  * }
  * ---
  */
-Address parseAddress(in char[] hostaddr, in char[] service = null) @trusted
+Address parseAddress(in char[] hostaddr, in char[] service = null) @safe
 {
     if (getaddrinfoPointer && freeaddrinfoPointer)
         return getAddressInfo(hostaddr, service, AddressInfoFlags.NUMERICHOST)[0].address;
@@ -1226,7 +1226,7 @@ Address parseAddress(in char[] hostaddr, in char[] service = null) @trusted
 }
 
 /// ditto
-Address parseAddress(in char[] hostaddr, ushort port) @trusted
+Address parseAddress(in char[] hostaddr, ushort port) @safe
 {
     if (getaddrinfoPointer && freeaddrinfoPointer)
         return parseAddress(hostaddr, to!string(port));
